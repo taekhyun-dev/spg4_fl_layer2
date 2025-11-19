@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import List, OrderedDict
 from torchvision import models
+import torch.nn as nn
+import pyRAPL
 
 @dataclass
 class PyTorchModel:
@@ -12,7 +14,11 @@ class PyTorchModel:
 
 def create_mobilenet():
     """CIFAR10 데이터셋(10개 클래스)에 맞게 사전 학습 없이 초기화된 MobileNetV3-Small 모델을 생성"""
-    model = models.mobilenet_v3_small(weights=None, num_classes=10)
+    model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
+    num_ftrs = model.classifier[3].in_features 
+
+    model.classifier[3] = nn.Linear(num_ftrs, 10)
+    # model = models.mobilenet_v3_small(weights=None, num_classes=10)
     return model
 
 def check_mobilenet():
@@ -20,11 +26,13 @@ def check_mobilenet():
     import torchvision.models as models
     from thop import profile
     from torchsummary import summary
+    import time
+
 
     # 0. 모델 로드 (MobileNet-V3 Small)
     # weights=None (무작위 초기화) 또는 'IMAGENET1K_V1' (사전 학습)
     # 구조 분석이 목적이므로 어떤 것을 사용해도 파라미터 수와 계산량은 동일합니다.
-    model = models.mobilenet_v3_small(weights='IMAGENET1K_V1')
+    model = models.mobilenet_v3_small(weights=None, num_classes=10)
     model.eval() # 분석 시에는 항상 평가 모드(eval mode)로 설정
 
     # 1. 분석을 위한 더미 입력 데이터 생성
@@ -47,15 +55,53 @@ def check_mobilenet():
     print(f"총 계산량 (Total MACs): {macs / 1e9:.2f} G-MACs")
     print(f"(참고: GFLOPs는 약 { (macs * 2) / 1e9:.2f} GFLOPs 입니다.)")
 
+    from torchvision.datasets import CIFAR10
+    from torch.utils.data import DataLoader
+    import torchvision.transforms as T
+    transform = T.Compose([
+        T.Resize((224, 224)),
+        T.ToTensor(),
+        T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
 
-    # 3. 계층별 상세 정보 (torchsummary 라이브러리)
-    # torchsummary는 계층별 출력 크기, 파라미터 수, 총 파라미터 및 메모리 크기를 요약해줍니다.
-    # 입력 크기를 (channels, height, width)로 받습니다.
-    print(f"\n✅ [torchsummary 라이브러리 분석 (계층별 세부 정보)]")
-    # GPU가 있다면 "cuda", 없다면 "cpu"
-    device_name = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device_name)
+    test_dataset = CIFAR10(root='./data', train=False, download=True, transform=transform)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=4, drop_last=True)
+    device = torch.device("cuda")
+    pyRAPL.setup()
+    meter = pyRAPL.Measurement('inference')
+    start_time = time.time()
+    with torch.no_grad():
+        for images, _ in test_loader:
+            # 1. 입력을 바로 GPU로 보내고 FP16으로 변환 (여기까지는 데이터 로딩 비용)
+            # memory_format=torch.channels_last는 TRT에서 자동으로 처리하므로 필수는 아니지만 도움될 수 있음
+            images = images.to(device).half()
+            
+            # 모델 연산
+            outputs = model(images)
+            
+            images_processed += images.shape[0]
 
-    summary(model, input_size=(3, 224, 224), device=device_name)
+        meter.end()
+
+    end_time = time.time()
+    # === 시간 & 전력 출력 === #
+    elapsed_time = end_time - start_time
+    energy_uj = meter.result.pkg[0]
+    energy_joule = energy_uj / 1e6
+    power_watt = energy_joule / elapsed_time
+
+    print(f"전체 추론 시간: {elapsed_time:.2f}초")
+    print(f"에너지 소모: {energy_joule:.6f} J")
+    print(f"평균 전력량: {power_watt:.6f} W")
+
+    # # 3. 계층별 상세 정보 (torchsummary 라이브러리)
+    # # torchsummary는 계층별 출력 크기, 파라미터 수, 총 파라미터 및 메모리 크기를 요약해줍니다.
+    # # 입력 크기를 (channels, height, width)로 받습니다.
+    # print(f"\n✅ [torchsummary 라이브러리 분석 (계층별 세부 정보)]")
+    # # GPU가 있다면 "cuda", 없다면 "cpu"
+    # device_name = "cuda" if torch.cuda.is_available() else "cpu"
+    # model = model.to(device_name)
+
+    # summary(model, input_size=(3, 224, 224), device=device_name)
 
 check_mobilenet()
