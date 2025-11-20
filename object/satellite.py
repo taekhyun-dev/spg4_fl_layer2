@@ -30,7 +30,8 @@ class Satellite:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class WorkerSatellite(Satellite):
-    def __init__ (self, train_loader, val_loader):
+    def __init__ (self, master: 'MasterSatellite', train_loader, val_loader):
+        self.master = master
         self.local_model = self.global_model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -207,43 +208,41 @@ class MasterSatellite(Satellite):
         return None
 
 class Satellite_Manager:
-    def __init__ (self, master_satellites: Dict[int, 'MasterSatellite'], clock: 'SimulationClock', sim_logger):
-        self.master_satellites = master_satellites
+    def __init__ (self, master: 'MasterSatellite', clock: 'SimulationClock', sim_logger):
+        self.master = master
         self.logger = sim_logger
         self.clock = clock
-        self.logger.info("위성 관리자 생성 완료.")
+        self.logger.info(f"Master SAT {self.master.sat_id} 위성 관리자 생성 완료.")
 
     async def run(self):
-        self.logger.info("위성 관리자 운영 시작.")
-        for master_sat_id, master_sat in self.master_satellites.item():
-            self.logger.info(f"Master SAT {master_sat_id} 임무 시작.")
-            for sat in master_sat.cluster_members.values():
-                self.logger.info(f"  Worker SAT {sat.sat_id} 임무 시작.")
+        self.logger.info(f"Master SAT {self.master.sat_id} 위성 관리자 운영 시작.")
+        self.logger.info(f"Master SAT {self.master.sat_id} 임무 시작.")
+        for sat in self.master.cluster_members.values():
+            self.logger.info(f"  Worker SAT {sat.sat_id} 임무 시작.")
         await self.propagate_orbit_with_isl()
 
     async def propagate_orbit_with_isl(self):
         """ISL을 통해 워커 위성들과 통신하고 모델을 교환"""
         while True:
             await asyncio.sleep(self.clock.real_interval)
-            for master in self.master_satellites.values():
-                for worker in master.cluster_members.values():
-                    distance = self.get_distance_between(master, worker)
-                    if distance <= MAX_ISL_DISTANCE_KM:
-                        if master.cluster_model.version > worker.local_model.version or \
-                        (master.cluster_model.version == worker.local_model.version and master.cluster_model.model_state_dict is not worker.local_model.model_state_dict):
-                            await master.send_model_to_worker(worker)
-                        if worker.model_ready_to_upload:
-                            await master.receive_model_from_worker(worker)
-
-                    current_ts = self.clock.get_time_ts()
-                    geocentric = worker.satellite_obj.at(current_ts)
-                    subpoint = geocentric.subpoint()
-                    worker.position["lat"], worker.position["lon"], worker.position["alt"] = subpoint.latitude.degrees, subpoint.longitude.degrees, subpoint.elevation.km
+            for worker in self.master.cluster_members.values():
+                distance = self.get_distance_between(self.master, worker)
+                if distance <= MAX_ISL_DISTANCE_KM:
+                    if self.master.cluster_model.version > worker.local_model.version or \
+                    (self.master.cluster_model.version == worker.local_model.version and self.master.cluster_model.model_state_dict is not worker.local_model.model_state_dict):
+                        await self.master.send_model_to_worker(worker)
+                    if worker.model_ready_to_upload:
+                        await self.master.receive_model_from_worker(worker)
 
                 current_ts = self.clock.get_time_ts()
-                geocentric = master.satellite_obj.at(current_ts)
+                geocentric = worker.satellite_obj.at(current_ts)
                 subpoint = geocentric.subpoint()
-                master.position["lat"], master.position["lon"], master.position["alt"] = subpoint.latitude.degrees, subpoint.longitude.degrees, subpoint.elevation.km
+                worker.position["lat"], worker.position["lon"], worker.position["alt"] = subpoint.latitude.degrees, subpoint.longitude.degrees, subpoint.elevation.km
+
+            current_ts = self.clock.get_time_ts()
+            geocentric = self.master.satellite_obj.at(current_ts)
+            subpoint = geocentric.subpoint()
+            self.master.position["lat"], self.master.position["lon"], self.master.position["alt"] = subpoint.latitude.degrees, subpoint.longitude.degrees, subpoint.elevation.km
 
     def get_distance_between(self, one_sat: 'Satellite', other_sat: 'Satellite') -> float:
         """다른 위성과의 거리를 계산"""

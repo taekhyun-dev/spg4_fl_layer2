@@ -4,9 +4,9 @@ import torch
 from pathlib import Path
 from typing import List, Dict, Coroutine
 from datetime import datetime, timezone, timedelta
-from utils.config import NUM_CLIENTS, DIRICHLET_ALPHA, BATCH_SIZE, NUM_WORKERS
+from utils.config import NUM_CLIENTS, DIRICHLET_ALPHA, BATCH_SIZE, NUM_WORKERS, NUM_MASTERS, SATS_PER_PLANE
 from utils.skyfield_utils import EarthSatellite
-from object.satellite import Satellite, Satellite_Manager
+from object.satellite import Satellite, Satellite_Manager, MasterSatellite, WorkerSatellite
 from object.environment import GroundStation, IoT
 from object.clock import SimulationClock
 from utils.logging_setup import setup_loggers
@@ -63,20 +63,55 @@ def create_simulation_environment(
     # 3. 위성 객체 및 클러스터 구성 (기존 main.py 로직)
     satellites_in_sim: Dict[int, Satellite] = {}
     sat_ids = sorted(list(all_sats_skyfield.keys()))
+    
+    if len(sat_ids) < NUM_MASTERS * (SATS_PER_PLANE // NUM_MASTERS if NUM_MASTERS > 0 else SATS_PER_PLANE):
+       raise ValueError(f"시뮬레이션을 위해 충분한 수의 위성 TLE가 필요합니다.")
+       
+    master_ids = [sat_ids[i * SATS_PER_PLANE] for i in range(NUM_MASTERS)]
+    worker_ids = [sid for sid in sat_ids if sid not in master_ids]
+    
+    sim_logger.info(f"마스터 위성으로 {master_ids}가 선정되었습니다.")
 
-    for sat_id in sat_ids:
-        train_loader = client_loaders[sat_id]
-        sat = Satellite(
-            sat_id, all_sats_skyfield[sat_id], clock, sim_logger, perf_logger,
-            initial_global_model, train_loader, val_loader
+    masters = []
+    for m_id in master_ids:
+        master_sat = MasterSatellite(
+            m_id, all_sats_skyfield[m_id], clock,
+            initial_model=initial_global_model,
+            iot_clusters=iot_clusters, eval_infra=eval_infra
         )
-        satellites_in_sim[sat_id] = sat
+        satellites_in_sim[m_id] = master_sat
+        masters.append(master_sat)
+
+    for i, w_id in enumerate(worker_ids):
+        train_loader = client_loaders[w_id]
+        assigned_master = masters[i % NUM_MASTERS]
+        worker_sat = WorkerSatellite(
+            sat_id=w_id, satellite_obj=all_sats_skyfield[w_id], 
+            clock=clock, initial_model=initial_global_model,
+            iot_clusters=iot_clusters, master=assigned_master,
+            train_loader=train_loader, val_loader=val_loader
+        )
+        assigned_master.add_member(worker_sat)
+        satellites_in_sim[w_id] = worker_sat
+
+    # for sat_id in sat_ids:
+    #     train_loader = client_loaders[sat_id]
+    #     sat = Satellite(
+    #         sat_id, all_sats_skyfield[sat_id], clock, sim_logger, perf_logger,
+    #         initial_global_model, train_loader, val_loader
+    #     )
+    #     satellites_in_sim[sat_id] = sat
             
     sim_logger.info(f"총 {len(satellites_in_sim)}개 위성 생성 완료.")
 
-    sat_manager = Satellite_Manager(satellites_in_sim, clock, sim_logger)
+    sat_managers = []
+    for master in masters:
+        sat_manager = Satellite_Manager(master, clock, sim_logger)
+        sat_managers.append(sat_manager)
+
+    # sat_manager = Satellite_Manager(satellites_in_sim, clock, sim_logger)
     
-    return sat_manager, satellites_in_sim, ground_stations, iot_clusters
+    return sat_managers, satellites_in_sim, ground_stations, iot_clusters
 
 async def main():
     try:
@@ -103,7 +138,7 @@ async def main():
         )
         # 로드된 데이터를 전달하여 시뮬레이션 환경 구성
         sim_logger.info("시뮬레이션 환경을 구성 ...")
-        sat_manager, satellites, ground_stations, iot_clusters = create_simulation_environment(
+        sat_managers, satellites, ground_stations, iot_clusters = create_simulation_environment(
             simulation_clock, eval_infra
         )
 
@@ -117,7 +152,7 @@ async def main():
             simulation_clock.run(),
             *[gs.run(simulation_clock, satellites) for gs in ground_stations],
             *[iot.run(simulation_clock, satellites) for iot in iot_clusters],
-            sat_manager.run()
+            *[sat_manager.run() for sat_manager in sat_managers]
         ]
         sim_logger.info("시뮬레이션을 시작합니다.")
         await asyncio.gather(*[asyncio.create_task(task) for task in sim_tasks])

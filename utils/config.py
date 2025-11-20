@@ -13,6 +13,8 @@ GS_FLYOVER_THRESHOLD_DEG = 10.0   # 마스터 위성이 이 고도각 이상으�
 # --- Federated Learning Aggregation Policy (Ground Station) ---
 AGGREGATION_STALENESS_THRESHOLD = 5 # 글로벌 모델 버전과 취합 대상 클러스터 모델 버전 간의 최대 차이 허용치 (Staleness)
 
+NUM_MASTERS = 10      # 마스터 위성의 총 개수
+SATS_PER_PLANE = 20   # 하나의 궤도면에 포함된 위성의 수
 NUM_CLIENTS = 5       # 10명의 클라이언트를 시뮬레이션
 DIRICHLET_ALPHA = 0.5  # Non-IID 강도를 중간 정도로 설정
 BATCH_SIZE = 128
