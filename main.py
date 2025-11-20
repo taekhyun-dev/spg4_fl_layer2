@@ -74,23 +74,22 @@ def create_simulation_environment(
 
     masters = []
     for m_id in master_ids:
-        master_sat = MasterSatellite(
-            m_id, all_sats_skyfield[m_id], clock,
-            initial_model=initial_global_model,
-            iot_clusters=iot_clusters, eval_infra=eval_infra
+        sat = Satellite(
+            m_id, all_sats_skyfield[m_id], clock, sim_logger, perf_logger,
+            initial_global_model
         )
+        master_sat = MasterSatellite(sat, test_loader)
         satellites_in_sim[m_id] = master_sat
         masters.append(master_sat)
 
     for i, w_id in enumerate(worker_ids):
         train_loader = client_loaders[w_id]
         assigned_master = masters[i % NUM_MASTERS]
-        worker_sat = WorkerSatellite(
-            sat_id=w_id, satellite_obj=all_sats_skyfield[w_id], 
-            clock=clock, initial_model=initial_global_model,
-            iot_clusters=iot_clusters, master=assigned_master,
-            train_loader=train_loader, val_loader=val_loader
+        sat = Satellite(
+            w_id, all_sats_skyfield[w_id], clock, sim_logger, perf_logger,
+            initial_global_model
         )
+        worker_sat = WorkerSatellite(sat, assigned_master, train_loader, val_loader)
         assigned_master.add_member(worker_sat)
         satellites_in_sim[w_id] = worker_sat
 

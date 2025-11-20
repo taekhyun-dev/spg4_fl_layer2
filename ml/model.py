@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, OrderedDict
 from torchvision import models
 import torch.nn as nn
-import pyRAPL
+# import pyRAPL
 
 @dataclass
 class PyTorchModel:
@@ -21,78 +21,78 @@ def create_mobilenet():
     # model = models.mobilenet_v3_small(weights=None, num_classes=10)
     return model
 
-def check_mobilenet():
-    import torch
-    import torchvision.models as models
-    from thop import profile
-    from torchsummary import summary
-    import time
+# def check_mobilenet():
+#     import torch
+#     import torchvision.models as models
+#     from thop import profile
+#     from torchsummary import summary
+#     import time
 
 
-    # 0. 모델 로드 (MobileNet-V3 Small)
-    # weights=None (무작위 초기화) 또는 'IMAGENET1K_V1' (사전 학습)
-    # 구조 분석이 목적이므로 어떤 것을 사용해도 파라미터 수와 계산량은 동일합니다.
-    model = models.mobilenet_v3_small(weights=None, num_classes=10)
-    model.eval() # 분석 시에는 항상 평가 모드(eval mode)로 설정
+#     # 0. 모델 로드 (MobileNet-V3 Small)
+#     # weights=None (무작위 초기화) 또는 'IMAGENET1K_V1' (사전 학습)
+#     # 구조 분석이 목적이므로 어떤 것을 사용해도 파라미터 수와 계산량은 동일합니다.
+#     model = models.mobilenet_v3_small(weights=None, num_classes=10)
+#     model.eval() # 분석 시에는 항상 평가 모드(eval mode)로 설정
 
-    # 1. 분석을 위한 더미 입력 데이터 생성
-    # 표준 ImageNet 입력 크기 (batch_size=1, channels=3, height=224, width=224)
-    # 계산량(FLOPs)은 입력 크기에 따라 달라지므로 표준 크기를 사용합니다.
-    input_tensor = torch.randn(1, 3, 224, 224)
+#     # 1. 분석을 위한 더미 입력 데이터 생성
+#     # 표준 ImageNet 입력 크기 (batch_size=1, channels=3, height=224, width=224)
+#     # 계산량(FLOPs)은 입력 크기에 따라 달라지므로 표준 크기를 사용합니다.
+#     input_tensor = torch.randn(1, 3, 224, 224)
 
-    print("--- MobileNet-V3 Small 모델 기본 정보 ---")
-    print(f"입력 데이터 크기 (Input size): {input_tensor.shape}")
-    print("-" * 40)
+#     print("--- MobileNet-V3 Small 모델 기본 정보 ---")
+#     print(f"입력 데이터 크기 (Input size): {input_tensor.shape}")
+#     print("-" * 40)
 
-    # 2. 총 계산량 (FLOPs / MACs) 및 파라미터 계산 (thop 라이브러리)
-    # thop는 MACs (Multiply-Accumulate operations)를 계산합니다.
-    # 1 G-MACs = 10^9 MACs (Giga-MACs)
-    # (참고: FLOPs는 종종 2 * MACs로 근사하지만, thop의 출력은 G-MACs입니다.)
-    macs, params = profile(model, inputs=(input_tensor, ), verbose=False) # verbose=False로 세부 출력 끔
+#     # 2. 총 계산량 (FLOPs / MACs) 및 파라미터 계산 (thop 라이브러리)
+#     # thop는 MACs (Multiply-Accumulate operations)를 계산합니다.
+#     # 1 G-MACs = 10^9 MACs (Giga-MACs)
+#     # (참고: FLOPs는 종종 2 * MACs로 근사하지만, thop의 출력은 G-MACs입니다.)
+#     macs, params = profile(model, inputs=(input_tensor, ), verbose=False) # verbose=False로 세부 출력 끔
 
-    print(f"\n✅ [thop 라이브러리 분석 (계산량 및 파라미터)]")
-    print(f"총 파라미터 개수 (Total Params): {int(params):,} 개")
-    print(f"총 계산량 (Total MACs): {macs / 1e9:.2f} G-MACs")
-    print(f"(참고: GFLOPs는 약 { (macs * 2) / 1e9:.2f} GFLOPs 입니다.)")
+#     print(f"\n✅ [thop 라이브러리 분석 (계산량 및 파라미터)]")
+#     print(f"총 파라미터 개수 (Total Params): {int(params):,} 개")
+#     print(f"총 계산량 (Total MACs): {macs / 1e9:.2f} G-MACs")
+#     print(f"(참고: GFLOPs는 약 { (macs * 2) / 1e9:.2f} GFLOPs 입니다.)")
 
-    from torchvision.datasets import CIFAR10
-    from torch.utils.data import DataLoader
-    import torchvision.transforms as T
-    transform = T.Compose([
-        T.Resize((224, 224)),
-        T.ToTensor(),
-        T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
+#     from torchvision.datasets import CIFAR10
+#     from torch.utils.data import DataLoader
+#     import torchvision.transforms as T
+#     transform = T.Compose([
+#         T.Resize((224, 224)),
+#         T.ToTensor(),
+#         T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+#     ])
 
-    test_dataset = CIFAR10(root='./data', train=False, download=True, transform=transform)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=4, drop_last=True)
-    device = torch.device("cuda")
-    pyRAPL.setup()
-    meter = pyRAPL.Measurement('inference')
-    start_time = time.time()
-    with torch.no_grad():
-        for images, _ in test_loader:
-            # 1. 입력을 바로 GPU로 보내고 FP16으로 변환 (여기까지는 데이터 로딩 비용)
-            # memory_format=torch.channels_last는 TRT에서 자동으로 처리하므로 필수는 아니지만 도움될 수 있음
-            images = images.to(device).half()
+#     test_dataset = CIFAR10(root='./data', train=False, download=True, transform=transform)
+#     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=4, drop_last=True)
+#     device = torch.device("cuda")
+#     pyRAPL.setup()
+#     meter = pyRAPL.Measurement('inference')
+#     start_time = time.time()
+#     with torch.no_grad():
+#         for images, _ in test_loader:
+#             # 1. 입력을 바로 GPU로 보내고 FP16으로 변환 (여기까지는 데이터 로딩 비용)
+#             # memory_format=torch.channels_last는 TRT에서 자동으로 처리하므로 필수는 아니지만 도움될 수 있음
+#             images = images.to(device).half()
             
-            # 모델 연산
-            outputs = model(images)
+#             # 모델 연산
+#             outputs = model(images)
             
-            images_processed += images.shape[0]
+#             images_processed += images.shape[0]
 
-        meter.end()
+#         meter.end()
 
-    end_time = time.time()
-    # === 시간 & 전력 출력 === #
-    elapsed_time = end_time - start_time
-    energy_uj = meter.result.pkg[0]
-    energy_joule = energy_uj / 1e6
-    power_watt = energy_joule / elapsed_time
+#     end_time = time.time()
+#     # === 시간 & 전력 출력 === #
+#     elapsed_time = end_time - start_time
+#     energy_uj = meter.result.pkg[0]
+#     energy_joule = energy_uj / 1e6
+#     power_watt = energy_joule / elapsed_time
 
-    print(f"전체 추론 시간: {elapsed_time:.2f}초")
-    print(f"에너지 소모: {energy_joule:.6f} J")
-    print(f"평균 전력량: {power_watt:.6f} W")
+#     print(f"전체 추론 시간: {elapsed_time:.2f}초")
+#     print(f"에너지 소모: {energy_joule:.6f} J")
+#     print(f"평균 전력량: {power_watt:.6f} W")
 
     # # 3. 계층별 상세 정보 (torchsummary 라이브러리)
     # # torchsummary는 계층별 출력 크기, 파라미터 수, 총 파라미터 및 메모리 크기를 요약해줍니다.
