@@ -104,4 +104,4 @@ def check_mobilenet():
 
     # summary(model, input_size=(3, 224, 224), device=device_name)
 
-check_mobilenet()
+# check_mobilenet()

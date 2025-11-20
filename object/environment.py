@@ -6,7 +6,7 @@ from skyfield.api import Topos
 from typing import Dict
 from ml.model import PyTorchModel
 from ml.training import evaluate_model, fed_avg
-from satellite import Satellite, MasterSatellite
+from object.satellite import Satellite, MasterSatellite
 from utils.logging_setup import KST
 from utils.config import AGGREGATION_STALENESS_THRESHOLD, IOT_FLYOVER_THRESHOLD_DEG
 from object.clock import SimulationClock
