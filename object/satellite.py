@@ -242,6 +242,7 @@ class Satellite_Manager:
         """ISL을 통해 워커 위성들과 통신하고 모델을 교환"""
         while True:
             await asyncio.sleep(self.clock.real_interval)
+            await self._aggregate_and_evaluate_cluster_models()
             tasks = []
             for worker in self.master.cluster_members.values():
                 distance = self.get_distance_between(self.master, worker)
