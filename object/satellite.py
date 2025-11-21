@@ -242,24 +242,20 @@ class Satellite_Manager:
         """ISL을 통해 워커 위성들과 통신하고 모델을 교환"""
         while True:
             await asyncio.sleep(self.clock.real_interval)
+            tasks = []
             for worker in self.master.cluster_members.values():
                 distance = self.get_distance_between(self.master, worker)
                 if distance <= MAX_ISL_DISTANCE_KM:
                     if self.master.cluster_model.version > worker.local_model.version or \
                     (self.master.cluster_model.version == worker.local_model.version and self.master.cluster_model.model_state_dict is not worker.local_model.model_state_dict):
-                        await self.master.send_model_to_worker(worker)
+                        send_model_task = asyncio.create_task(self.master.send_model_to_worker(worker))
+                        tasks.append(send_model_task)
                     if worker.model_ready_to_upload:
-                        await self.master.receive_model_from_worker(worker)
+                        receive_model_task = asyncio.create_task(self.master.receive_model_from_worker(worker))
+                        tasks.append(receive_model_task)
+            await asyncio.gather(*tasks)
 
-                    tasks: List[Coroutine] = []
-                        simulation_clock.run(),
-                        *[gs.run(simulation_clock, masters) for gs in ground_stations],
-                        *[iot.run(simulation_clock, workers) for iot in iot_clusters],
-                        *[sat_manager.run() for sat_manager in sat_managers]
-                    ]
-                    sim_logger.info("시뮬레이션을 시작합니다.")
-                    await asyncio.gather(*[asyncio.create_task(task) for task in sim_tasks])
-
+            for worker in self.master.cluster_members.values():
                 current_ts = self.clock.get_time_ts()
                 geocentric = worker.satellite_obj.at(current_ts)
                 subpoint = geocentric.subpoint()
