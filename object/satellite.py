@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Coroutine
 from datetime import datetime
 from typing import Tuple, Dict
 from ml.model import PyTorchModel, create_mobilenet
@@ -250,6 +250,15 @@ class Satellite_Manager:
                         await self.master.send_model_to_worker(worker)
                     if worker.model_ready_to_upload:
                         await self.master.receive_model_from_worker(worker)
+
+                    tasks: List[Coroutine] = []
+                        simulation_clock.run(),
+                        *[gs.run(simulation_clock, masters) for gs in ground_stations],
+                        *[iot.run(simulation_clock, workers) for iot in iot_clusters],
+                        *[sat_manager.run() for sat_manager in sat_managers]
+                    ]
+                    sim_logger.info("시뮬레이션을 시작합니다.")
+                    await asyncio.gather(*[asyncio.create_task(task) for task in sim_tasks])
 
                 current_ts = self.clock.get_time_ts()
                 geocentric = worker.satellite_obj.at(current_ts)
