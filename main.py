@@ -60,8 +60,6 @@ def create_simulation_environment(
         IoT("Siberian_Tundra", 68.35, 18.79, 420, sim_logger, initial_model = initial_global_model, test_loader=test_loader)
     ]
 
-    # 3. 위성 객체 및 클러스터 구성 (기존 main.py 로직)
-    satellites_in_sim: Dict[int, Satellite] = {}
     sat_ids = sorted(list(all_sats_skyfield.keys()))
     
     if len(sat_ids) < NUM_MASTERS * (SATS_PER_PLANE // NUM_MASTERS if NUM_MASTERS > 0 else SATS_PER_PLANE):
@@ -77,9 +75,9 @@ def create_simulation_environment(
         master_sat = MasterSatellite(m_id, all_sats_skyfield[m_id], clock, sim_logger, perf_logger,
             initial_global_model, test_loader
         )
-        satellites_in_sim[m_id] = master_sat
         masters.append(master_sat)
 
+    workers = []
     for i, w_id in enumerate(worker_ids):
         train_loader = client_loaders[w_id]
         assigned_master = masters[i % NUM_MASTERS]
@@ -88,7 +86,7 @@ def create_simulation_environment(
             initial_global_model, assigned_master, train_loader, val_loader
         )
         assigned_master.add_member(worker_sat)
-        satellites_in_sim[w_id] = worker_sat
+        workers.append(worker_sat)
 
     # for sat_id in sat_ids:
     #     train_loader = client_loaders[sat_id]
@@ -97,8 +95,8 @@ def create_simulation_environment(
     #         initial_global_model, train_loader, val_loader
     #     )
     #     satellites_in_sim[sat_id] = sat
-            
-    sim_logger.info(f"총 {len(satellites_in_sim)}개 위성 생성 완료.")
+    sim_logger.info(f"총 {len(masters)}개 마스터 위성 생성 완료.")            
+    sim_logger.info(f"총 {len(workers)}개 워커 위성 생성 완료.")
 
     sat_managers = []
     for master in masters:
@@ -107,7 +105,7 @@ def create_simulation_environment(
 
     # sat_manager = Satellite_Manager(satellites_in_sim, clock, sim_logger)
     
-    return sat_managers, masters, satellites_in_sim, ground_stations, iot_clusters
+    return sat_managers, masters, workers, ground_stations, iot_clusters
 
 async def main():
     try:
@@ -134,7 +132,7 @@ async def main():
         )
         # 로드된 데이터를 전달하여 시뮬레이션 환경 구성
         sim_logger.info("시뮬레이션 환경을 구성 ...")
-        sat_managers, masters, satellites, ground_stations, iot_clusters = create_simulation_environment(
+        sat_managers, masters, workers, ground_stations, iot_clusters = create_simulation_environment(
             simulation_clock, eval_infra
         )
 
@@ -147,7 +145,7 @@ async def main():
         sim_tasks: List[Coroutine] = [
             simulation_clock.run(),
             *[gs.run(simulation_clock, masters) for gs in ground_stations],
-            *[iot.run(simulation_clock, satellites) for iot in iot_clusters],
+            *[iot.run(simulation_clock, workers) for iot in iot_clusters],
             *[sat_manager.run() for sat_manager in sat_managers]
         ]
         sim_logger.info("시뮬레이션을 시작합니다.")

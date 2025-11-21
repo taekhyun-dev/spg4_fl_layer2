@@ -6,7 +6,7 @@ from skyfield.api import Topos
 from typing import Dict
 from ml.model import PyTorchModel
 from ml.training import evaluate_model, fed_avg
-from object.satellite import Satellite, MasterSatellite
+from object.satellite import WorkerSatellite, MasterSatellite
 from utils.logging_setup import KST
 from utils.config import AGGREGATION_STALENESS_THRESHOLD, IOT_FLYOVER_THRESHOLD_DEG
 from object.clock import SimulationClock
@@ -21,11 +21,12 @@ class IoT:
         self.test_loader = test_loader
         self.logger.info(f"IoT 클러스터 '{self.name}' 생성 완료.")
 
-    async def run(self, clock: 'SimulationClock', satellites: Dict[int, 'Satellite']):
+    async def run(self, clock: 'SimulationClock', workers: list['WorkerSatellite']):
         self.logger.info(f"IoT 클러스터 '{self.name}' 운영 시작.")
         while True:
             current_ts = clock.get_time_ts()
-            for sat_id, sat in satellites.items():
+            for sat in workers:
+                sat_id = sat.sat_id
                 elevation = (sat.satellite_obj - self.topos).at(current_ts).altaz()[0].degrees
                 tasks = []
                 if elevation >= IOT_FLYOVER_THRESHOLD_DEG and sat.state == 'IDLE':
