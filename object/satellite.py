@@ -30,7 +30,15 @@ class Satellite:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class WorkerSatellite(Satellite):
-    def __init__ (self, master: 'MasterSatellite', train_loader, val_loader):
+    def __init__ (self,
+                    sat_id: int, 
+                    satellite_obj: EarthSatellite, 
+                    clock: 'SimulationClock', 
+                    sim_logger, 
+                    perf_logger, 
+                    initial_model: PyTorchModel,
+                    master: 'MasterSatellite', train_loader, val_loader):
+        super().__init__(sat_id, satellite_obj, clock, sim_logger, perf_logger, initial_model)
         self.master = master
         self.local_model = self.global_model
         self.train_loader = train_loader
@@ -139,15 +147,13 @@ class WorkerSatellite(Satellite):
         return None
 
 class MasterSatellite(Satellite):
-    def __init__(self, 
-                 # 1. 부모 클래스(Satellite) 초기화에 필요한 인자들을 모두 받습니다.
+    def __init__(self,
                  sat_id: int, 
                  satellite_obj: EarthSatellite, 
                  clock: 'SimulationClock', 
                  sim_logger, 
                  perf_logger, 
                  initial_model: PyTorchModel,
-                 # 2. MasterSatellite만의 고유 인자
                  test_loader):
         super().__init__(sat_id, satellite_obj, clock, sim_logger, perf_logger, initial_model)
         self.test_loader = test_loader

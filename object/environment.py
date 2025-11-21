@@ -63,12 +63,13 @@ class GroundStation:
         self.logger.info(f"지상국 '{self.name}' 생성 완료. 글로벌 모델 버전: {self.global_model.version}")
         self.logger.info(f"  - Aggregation 정책: 버전 허용치 {self.staleness_threshold}")
 
-    async def run(self, clock: 'SimulationClock', master_satellites: Dict[int, 'MasterSatellite']):
+    async def run(self, clock: 'SimulationClock', master_satellites: list['MasterSatellite']):
         self.logger.info(f"지상국 '{self.name}' 운영 시작.")
         while True:
             current_ts = clock.get_time_ts()
-            for master_sat_id, master_sat in master_satellites.items():
-                elevation = (master_sat.satellite_obj - self.topos).at(current_ts).altaz()[0].degrees
+            for master in master_satellites:
+                master_sat_id= master.sat_id
+                elevation = (master.satellite_obj - self.topos).at(current_ts).altaz()[0].degrees
                 prev_visible = self._comm_status.get(master_sat_id, False)
                 visible_now = elevation >= self.threshold_deg
 
@@ -78,19 +79,19 @@ class GroundStation:
                     # AOS
                     if not prev_visible:
                         self.logger.info(f"📡 [AOS] {self.name} <-> Master SAT {master_sat_id} 통신 시작 (고도각: {elevation:.2f}°)")
-                        master_sat.state = 'COMMUNICATING_GS'
+                        master.state = 'COMMUNICATING_GS'
                     # Local Model 수신
-                    if master_sat.model_ready_to_upload:
-                        receive_model_task = asyncio.create_task(self.receive_model_from_satellite(master_sat))
+                    if master.model_ready_to_upload:
+                        receive_model_task = asyncio.create_task(self.receive_model_from_satellite(master))
                         tasks.append(receive_model_task)
                     # Global Model 전송
-                    if self.global_model.version > master_sat.cluster_model.version:
-                        send_model_task = asyncio.create_task(self.send_model_to_satellite(master_sat))
+                    if self.global_model.version > master.cluster_model.version:
+                        send_model_task = asyncio.create_task(self.send_model_to_satellite(master))
                         tasks.append(send_model_task)
                 # LOS
                 elif prev_visible and not visible_now:
                     self.logger.info(f"📡 [LOS] {self.name} <-> Master SAT {master_sat_id} 통신 종료 (고도각: {elevation:.2f}°)")
-                    master_sat.state = 'IDLE'
+                    master.state = 'IDLE'
                 self._comm_status[master_sat_id] = visible_now
                 await asyncio.gather(*tasks)
             await asyncio.sleep(clock.real_interval)

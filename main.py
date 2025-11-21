@@ -74,22 +74,19 @@ def create_simulation_environment(
 
     masters = []
     for m_id in master_ids:
-        sat = Satellite(
-            m_id, all_sats_skyfield[m_id], clock, sim_logger, perf_logger,
-            initial_global_model
+        master_sat = MasterSatellite(m_id, all_sats_skyfield[m_id], clock, sim_logger, perf_logger,
+            initial_global_model, test_loader
         )
-        master_sat = MasterSatellite(sat, test_loader)
         satellites_in_sim[m_id] = master_sat
         masters.append(master_sat)
 
     for i, w_id in enumerate(worker_ids):
         train_loader = client_loaders[w_id]
         assigned_master = masters[i % NUM_MASTERS]
-        sat = Satellite(
-            w_id, all_sats_skyfield[w_id], clock, sim_logger, perf_logger,
-            initial_global_model
+
+        worker_sat = WorkerSatellite( w_id, all_sats_skyfield[w_id], clock, sim_logger, perf_logger,
+            initial_global_model, assigned_master, train_loader, val_loader
         )
-        worker_sat = WorkerSatellite(sat, assigned_master, train_loader, val_loader)
         assigned_master.add_member(worker_sat)
         satellites_in_sim[w_id] = worker_sat
 
@@ -110,7 +107,7 @@ def create_simulation_environment(
 
     # sat_manager = Satellite_Manager(satellites_in_sim, clock, sim_logger)
     
-    return sat_managers, satellites_in_sim, ground_stations, iot_clusters
+    return sat_managers, masters, satellites_in_sim, ground_stations, iot_clusters
 
 async def main():
     try:
@@ -137,7 +134,7 @@ async def main():
         )
         # 로드된 데이터를 전달하여 시뮬레이션 환경 구성
         sim_logger.info("시뮬레이션 환경을 구성 ...")
-        sat_managers, satellites, ground_stations, iot_clusters = create_simulation_environment(
+        sat_managers, masters, satellites, ground_stations, iot_clusters = create_simulation_environment(
             simulation_clock, eval_infra
         )
 
@@ -149,7 +146,7 @@ async def main():
         # 시뮬레이션 메인 태스크들
         sim_tasks: List[Coroutine] = [
             simulation_clock.run(),
-            *[gs.run(simulation_clock, satellites) for gs in ground_stations],
+            *[gs.run(simulation_clock, masters) for gs in ground_stations],
             *[iot.run(simulation_clock, satellites) for iot in iot_clusters],
             *[sat_manager.run() for sat_manager in sat_managers]
         ]
