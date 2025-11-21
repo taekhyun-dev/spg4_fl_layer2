@@ -4,7 +4,7 @@
 LOCAL_EPOCHS = 1              # 각 위성이 로컬 학습을 수행할 에포크 수
 FEDPROX_MU = 0.01             # FedProx 하이퍼파라미터 (mu)
 
-MAX_ISL_DISTANCE_KM = 2500
+MAX_ISL_DISTANCE_KM = 25000000
 
 # --- Ground Station & IoT Settings ---
 IOT_FLYOVER_THRESHOLD_DEG = 30.0  # 워커 위성이 이 고도각 이상으로 IoT 클러스터 상공을 통과할 때 학습을 시작합니다.
