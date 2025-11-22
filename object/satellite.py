@@ -186,13 +186,12 @@ class MasterSatellite(Satellite):
         worker.model_ready_to_upload = False
         self.logger.info(f"  📥 MasterSAT {self.sat_id}: Worker {worker.sat_id} 모델 수신. (버퍼 크기: {len(self.cluster_model_buffer)})")
 
-    async def aggregate_models_periodically(self):
+    async def aggregate_models(self):
         """주기적으로 버퍼에 쌓인 워커 모델들을 취합"""
-        while True:
+        # while True:
             # await asyncio.sleep(30)
-            await asyncio.sleep(2)
-            if not self.cluster_model_buffer:
-                continue
+            # await asyncio.sleep(2)
+        if self.cluster_model_buffer:
             await self._aggregate_and_evaluate_cluster_models()
 
     async def _aggregate_and_evaluate_cluster_models(self):
@@ -242,7 +241,7 @@ class Satellite_Manager:
         """ISL을 통해 워커 위성들과 통신하고 모델을 교환"""
         while True:
             await asyncio.sleep(self.clock.real_interval)
-            await self._aggregate_and_evaluate_cluster_models()
+            await self.master.aggregate_models()
             tasks = []
             for worker in self.master.cluster_members.values():
                 distance = self.get_distance_between(self.master, worker)
