@@ -191,7 +191,7 @@ class MasterSatellite(Satellite):
         # while True:
             # await asyncio.sleep(30)
             # await asyncio.sleep(2)
-        if self.cluster_model_buffer:
+        if len(self.cluster_model_buffer) >= len(self.cluster_members):
             await self._aggregate_and_evaluate_cluster_models()
 
     async def _aggregate_and_evaluate_cluster_models(self):
