@@ -1,6 +1,7 @@
 # object/environment.py
 import asyncio
 import torch
+import os
 from datetime import datetime
 from skyfield.api import Topos
 from typing import Dict
@@ -60,6 +61,7 @@ class GroundStation:
         self.global_model = initial_model
         self.test_loader = test_loader
         self.perf_logger = perf_logger
+        self.best_miou = 0.0
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.logger.info(f"지상국 '{self.name}' 생성 완료. 글로벌 모델 버전: {self.global_model.version}")
         self.logger.info(f"  - Aggregation 정책: 버전 허용치 {self.staleness_threshold}")
@@ -122,7 +124,20 @@ class GroundStation:
 
         # evaluate
         loop = asyncio.get_running_loop()
-        accuracy, loss = await loop.run_in_executor(None, evaluate_model, self.global_model.model_state_dict, self.test_loader, self.device)
+        accuracy, loss, miou = await loop.run_in_executor(None, evaluate_model, self.global_model.model_state_dict, self.test_loader, self.device)
 
         self.logger.info(f"  🧪 [Global Test] Owner: {self.name}, Version: {self.global_model.version}, Accuracy: {accuracy:.2f}%, Loss: {loss:.4f}")
         self.perf_logger.info(f"{datetime.now(KST).isoformat()},GLOBAL_TEST,{self.name},{self.global_model.version},N/A,{accuracy:.4f},{loss:.6f}")
+        if miou > self.best_miou:
+            previous_best = self.best_miou
+            self.best_miou = miou
+            
+            save_dir = "./checkpoints/global"
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 파일명에 miou 포함
+            save_path = os.path.join(save_dir, f"best_global_model_v{new_version}_miou{miou:.2f}.pth")
+            
+            await loop.run_in_executor(None, torch.save, self.global_model.model_state_dict, save_path)
+            
+            self.logger.info(f" 💾 [Save] New Best mIoU Model! ({previous_best:.2f}% -> {self.best_miou:.2f}%)")

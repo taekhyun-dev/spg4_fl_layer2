@@ -108,9 +108,9 @@ class WorkerSatellite(Satellite):
         self.logger.info(f"  🧠 SAT {self.sat_id}: 로컬 학습 완료 ({LOCAL_EPOCHS} 에포크). 검증 시작...")
             
         # --- 검증 파트 ---
-        accuracy, loss = evaluate_model(new_state_dict, self.val_loader, self.device)
+        accuracy, loss, miou = evaluate_model(new_state_dict, self.val_loader, self.device)
             
-        return new_state_dict, accuracy, loss
+        return new_state_dict, accuracy, loss, miou
 
     async def train_and_eval(self):
         """CIFAR10 데이터셋으로 로컬 모델을 학습하고 검증"""
@@ -120,10 +120,10 @@ class WorkerSatellite(Satellite):
         try:
             # 현재 실행중인 이벤트 루프를 가져옵니다.
             loop = asyncio.get_running_loop()
-            new_state_dict, accuracy, loss = await loop.run_in_executor(None, self._train_and_eval)
+            new_state_dict, accuracy, loss, miou = await loop.run_in_executor(None, self._train_and_eval)
             self.local_model.model_state_dict = new_state_dict
-            self.logger.info(f"  📊 [Local Validation] SAT: {self.sat_id}, Version: {self.local_model.version}, Accuracy: {accuracy:.2f}%, Loss: {loss:.4f}")
-            self.perf_logger.info(f"{datetime.now(KST).isoformat()},LOCAL_VALIDATION,{self.sat_id},{self.local_model.version},N/A,{accuracy:.4f},{loss:.6f}")
+            self.logger.info(f"  📊 [Local Validation] SAT: {self.sat_id}, Version: {self.local_model.version}, Accuracy: {accuracy:.2f}%, Loss: {loss:.4f}, Miou: {miou:.2f}%")
+            self.perf_logger.info(f"{datetime.now(KST).isoformat()},LOCAL_VALIDATION,{self.sat_id},{self.local_model.version},N/A,{accuracy:.4f},{loss:.6f},{miou:.4f}")
 
             self.local_model.trained_by = [self.sat_id]
             self.model_ready_to_upload = True

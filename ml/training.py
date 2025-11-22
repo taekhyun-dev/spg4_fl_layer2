@@ -1,5 +1,6 @@
 # ml/training.py
 from typing import List, OrderedDict
+from torchmetrics import JaccardIndex
 import torch
 import torch.nn as nn
 from .model import create_mobilenet
@@ -12,6 +13,9 @@ def evaluate_model(model_state_dict, data_loader, device):
     model.eval()
     
     criterion = nn.CrossEntropyLoss()
+
+    jaccard = JaccardIndex(task="multiclass", num_classes=10).to(device)
+
     correct = 0
     total = 0
     total_loss = 0.0
@@ -19,17 +23,29 @@ def evaluate_model(model_state_dict, data_loader, device):
     with torch.no_grad():
         for images, labels in data_loader:
             images, labels = images.to(device), labels.to(device)
+
             outputs = model(images)
             loss = criterion(outputs, labels)
             total_loss += loss.item()
+
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+
+            jaccard.update(predicted, labels)
             
     accuracy = 100 * correct / total
     avg_loss = total_loss / len(data_loader)
+    miou = jaccard.compute().item() * 100
+    
     return accuracy, avg_loss
 
+"""
+Aggregation 함수
+이 부분에서 전체 모델의 성능 차이가 발생함.
+연구의 핵심 부분
+2-Layer에서는 Cluster와 Global 모델 각각에 대한 Aggregation 작업을 수행하는 것도 비교해야함
+"""
 def fed_avg(models_to_average: List[OrderedDict]) -> OrderedDict:
     """
     Federated Averaging 알고리즘을 수행.

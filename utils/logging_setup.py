@@ -52,7 +52,7 @@ def setup_loggers():
     perf_handler = logging.FileHandler(log_dir / f"performance_{timestamp}.csv", mode='w')
     
     # CSV 헤더 작성
-    perf_handler.stream.write("timestamp,event_type,owner_id,model_version,cluster_version,accuracy,loss\n")
+    perf_handler.stream.write("timestamp,event_type,owner_id,model_version,cluster_version,accuracy,loss,miou\n")
     perf_logger.addHandler(perf_handler)
     
     # 전파 방지
